@@ -1,0 +1,22 @@
+{
+    "type" : "record",
+    "name" : "TweetRecord",
+    "namespace" : "com.epam.bigdata.training.kafka.tweets.tweet",
+    "fields" : [ {
+        "name" : "dt",
+        "type" : "long"
+     }, {
+        "name" : "id",
+        "type" : "long"
+     }, {
+        "name" : "text",
+        "type" : "string"
+     }, {
+        "name" : "hashtags",
+        "type" : {
+            "type" : "array",
+            "items": "string"
+        }
+     }
+   ]
+}

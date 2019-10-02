@@ -1,0 +1,176 @@
+version: '3.3'
+services:
+  ## See https://docs.confluent.io/current/installation/docker/docs/image-reference.html for more details
+  zookeeper:
+    image: confluentinc/cp-zookeeper:${CONFLUENT_PLATFORM_VERSION:-3.3.3}
+    container_name: zookeeper-kafka
+    ports:
+    - "2181:2181"
+    - "2888:2888"
+    - "3888:3888"
+    healthcheck:
+      test: echo stat | nc localhost 2181
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    environment:
+    - ZOOKEEPER_SERVER_ID=1
+    - ZOOKEEPER_CLIENT_PORT=2181
+    - ZOOKEEPER_TICK_TIME=2000
+    - ZOOKEEPER_INIT_LIMIT=5
+    - ZOOKEEPER_SYNC_LIMIT=2
+    - ZOOKEEPER_SERVERS=zookeeper:2888:3888
+
+  kafka-1:
+    image: confluentinc/cp-kafka:${CONFLUENT_PLATFORM_VERSION:-3.3.3}
+    container_name: kafka-1
+    healthcheck:
+      test: ps augwwx | egrep [S]upportedKafka
+    depends_on:
+    - zookeeper
+    ports:
+    - "9091:9091"
+    - "1099:1099"
+    - "8199:8199"
+    environment:
+    - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-1:9091
+    - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9091
+    - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+    - KAFKA_BROKER_ID=1
+    - KAFKA_JMX_PORT=1099
+    - KAFKA_JMX_HOSTNAME=kafka-1
+    - BOOTSTRAP_SERVERS=kafka-1:9091,kafka-2:9092,kafka-3:9093
+    - ZOOKEEPER=zookeeper:2181
+
+  kafka-2:
+    image: confluentinc/cp-kafka:${CONFLUENT_PLATFORM_VERSION:-3.3.3}
+    container_name: kafka-2
+    healthcheck:
+      test: ps augwwx | egrep [S]upportedKafka
+    depends_on:
+    - zookeeper
+    ports:
+    - "9092:9092"
+    - "2099:2099"
+    - "8299:8299"
+    environment:
+    - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-2:9092
+    - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
+    - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+    - KAFKA_BROKER_ID=2
+    - KAFKA_JMX_PORT=2099
+    - KAFKA_JMX_HOSTNAME=kafka-2
+    - BOOTSTRAP_SERVERS=kafka-1:9091,kafka-2:9092,kafka-3:9093
+    - ZOOKEEPER=zookeeper:2181
+
+  kafka-3:
+    image: confluentinc/cp-kafka:${CONFLUENT_PLATFORM_VERSION:-3.3.3}
+    container_name: kafka-3
+    healthcheck:
+      test: ps augwwx | egrep [S]upportedKafka
+    depends_on:
+    - zookeeper
+    ports:
+    - "9093:9093"
+    - "3099:3099"
+    - "8399:8399"
+    environment:
+    - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-3:9093
+    - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9093
+    - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+    - KAFKA_BROKER_ID=3
+    - KAFKA_JMX_PORT=3099
+    - KAFKA_JMX_HOSTNAME=kafka-3
+    - BOOTSTRAP_SERVERS=kafka-1:9091,kafka-2:9092,kafka-3:9093
+    - ZOOKEEPER=zookeeper:2181
+
+  ## https://docs.confluent.io/current/schema-registry/docs/index.html
+  ## Kafka is used as Schema Registry storage backend.
+  ## The special Kafka topic <kafkastore.topic> (default _schemas), with a single partition, is used
+  schema-registry:
+     image: confluentinc/cp-schema-registry:${CONFLUENT_PLATFORM_VERSION:-3.3.3}
+     container_name: schema-registry
+     depends_on:
+       - kafka-1
+       - kafka-2
+       - kafka-3
+     ports:
+       - "8081:8081"
+     environment:
+       SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: 'zookeeper:2181'
+       SCHEMA_REGISTRY_HOST_NAME: schema-registry
+       SCHEMA_REGISTRY_LISTENERS: http://schema-registry:8081
+     restart: always
+
+  spark-master:
+    image: bde2020/spark-master:2.4.0-hadoop2.7
+    container_name: spark-master
+    ports:
+      - "8080:8080"
+      - "4040:4040"
+      - "7077:7077"
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+      - "constraint:node==<yourmasternode>"
+  spark-worker-1:
+    image: bde2020/spark-worker:2.4.0-hadoop2.7
+    container_name: spark-worker-1
+    depends_on:
+      - spark-master
+    ports:
+      - "8181:8081"
+    environment:
+      - "SPARK_MASTER=spark://spark-master:7077"
+      - "constraint:node==<yourworkernode>"
+  spark-worker-2:
+    image: bde2020/spark-worker:2.4.0-hadoop2.7
+    container_name: spark-worker-2
+    depends_on:
+      - spark-master
+    ports:
+      - "8281:8081"
+    environment:
+      - "SPARK_MASTER=spark://spark-master:7077"
+      - "constraint:node==<yourworkernode>"
+
+  ## HDFS services
+  namenode:
+    image: bde2020/hadoop-namenode:1.1.0-hadoop2.7.1-java8
+    container_name: namenode
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=tweets-cluster
+    ports:
+      - "50070:50070"
+    env_file:
+      - ./hdfs.env
+
+  datanode-1:
+    image: bde2020/hadoop-datanode:1.1.0-hadoop2.7.1-java8
+    container_name: datanode-1
+    depends_on:
+      - namenode
+    volumes:
+      - hadoop_datanode1:/hadoop/dfs/data
+    ports:
+      - "50075:50075"
+    env_file:
+      - ./hdfs.env
+
+  datanode-2:
+    image: bde2020/hadoop-datanode:1.1.0-hadoop2.7.1-java8
+    container_name: datanode-2
+    depends_on:
+      - namenode
+    volumes:
+      - hadoop_datanode2:/hadoop/dfs/data
+    ports:
+      - "50175:50075"
+    env_file:
+      - ./hdfs.env
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode1:
+  hadoop_datanode2:
