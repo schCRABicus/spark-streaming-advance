@@ -25,7 +25,7 @@
         <slf4j.version>1.7.25</slf4j.version>
         <commons.version>1.4</commons.version>
 
-        <junit.version>4.12</junit.version>
+        <junit.version>4.13.1</junit.version>
         <mockito.version>1.10.19</mockito.version>
         <mockserver.version>3.10.8</mockserver.version>
     </properties>
